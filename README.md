@@ -1,16 +1,25 @@
-# filmflow
+🌟 Key Features
 
-A new Flutter project.
+Cinematic UI/UX: Custom-engineered "Obsidian Premiere" dark mode with frosted glassmorphism (BackdropFilter), parallax scrolling, and tactile Hero animations.
 
-## Getting Started
+Real-time Discovery: Integrated with the TMDB API to fetch live trending movies, dynamic genre filtering, and deep-search functionality.
 
-This project is a starting point for a Flutter application.
+Personal Vault: A dedicated, state-managed favorites system allowing users to curate and save their top cinematic picks using local persistence (SharedPreferences).
 
-A few resources to get you started if this is your first Flutter project:
+Secure Authentication: Implemented login protocols using DummyJSON for user verification and session management.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Senior Architecture: Built with strict DRY principles, separating concerns into modular UI widgets, dedicated API service layers, and global ChangeNotifier providers.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+🛠 Tech Stack
+
+Framework: Flutter / Dart
+
+State Management: Provider
+
+Networking: Dio (HTTP Client)
+
+API: The Movie Database (TMDB), DummyJSON
+
+Local Storage: SharedPreferences
+
+Image Caching: cached_network_image
