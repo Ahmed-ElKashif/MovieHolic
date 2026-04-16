@@ -1,26 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../screens/welcome_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // To grab the user's email
+import '../providers/auth_provider.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
-  // Dedicated logout function for the profile screen
+  // Dedicated logout function using our new AuthProvider
   void _logout(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-
-    if (context.mounted) {
-      // pushAndRemoveUntil completely clears the back-history so they can't swipe back into the app
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-        (route) => false,
-      );
-    }
+    await context.read<Authprovider>().logout();
+    // No Navigator needed! The StreamBuilder in main.dart handles the kick.
   }
 
   @override
   Widget build(BuildContext context) {
+    // Dynamically grab the current Firebase user
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final String displayEmail = currentUser?.email ?? 'user@movieholic.com';
+    // Extract everything before the '@' symbol to use as a display name
+    final String displayName = displayEmail.split('@').first.toUpperCase();
+
     return CustomScrollView(
       slivers: [
         // 1. Cinematic Header
@@ -71,18 +70,16 @@ class ProfileScreen extends StatelessWidget {
                   child: const CircleAvatar(
                     radius: 60,
                     backgroundColor: Color(0xFF131313),
-                    // DummyJSON's default user avatar image
-                    backgroundImage: NetworkImage(
-                      'https://dummyjson.com/icon/emilys/128',
-                    ),
+                    // We can swap this to a default icon since DummyJSON is gone
+                    child: Icon(Icons.person, size: 60, color: Colors.white54),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // DummyJSON User Data
-                const Text(
-                  'Emily Johnson',
-                  style: TextStyle(
+                // Dynamic Firebase User Data
+                Text(
+                  displayName,
+                  style: const TextStyle(
                     fontFamily: 'Montserrat',
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
@@ -101,9 +98,9 @@ class ProfileScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.white.withOpacity(0.05)),
                   ),
-                  child: const Text(
-                    '@emilys • Premium Member',
-                    style: TextStyle(
+                  child: Text(
+                    displayEmail, // Shows their actual Firebase login email!
+                    style: const TextStyle(
                       color: Color(
                         0xFF00CED1,
                       ), // A touch of teal to pop against the red

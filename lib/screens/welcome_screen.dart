@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/main_background.dart';
 import '../widgets/movie_holic_logo.dart';
-import 'home_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -14,7 +13,7 @@ class WelcomeScreen extends StatefulWidget {
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
   // Controllers to grab user input
-  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   // State for tactile button animation
@@ -22,14 +21,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
+    // Fixed the typo here: AuthProvider (capital P)
+    final authProvider = Provider.of<Authprovider>(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFF131313), // Obsidian Base
@@ -75,14 +75,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 // 3. Glassmorphic Inputs
                 _buildTextField(
                   context,
-                  hintText: 'Username (e.g., emilys)',
-                  icon: Icons.person_outline,
-                  controller: _usernameController,
+                  hintText: 'Email (e.g., test@test.com)',
+                  icon: Icons.email_outlined,
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 16),
                 _buildTextField(
                   context,
-                  hintText: 'Password (e.g., emilyspass)',
+                  hintText: 'Password',
                   icon: Icons.lock_outline,
                   obscureText: true,
                   controller: _passwordController,
@@ -97,20 +98,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   onTap: authProvider.isLoading
                       ? null
                       : () async {
+                          // Hide keyboard on submit
+                          FocusScope.of(context).unfocus();
+
                           final success = await authProvider.login(
-                            _usernameController.text.trim(),
+                            _emailController.text.trim(),
                             _passwordController.text.trim(),
                           );
 
-                          if (success && mounted) {
+                          // We ONLY handle the failure case here!
+                          // If successful, the StreamBuilder in main.dart takes over and handles the routing.
+                          if (!success && mounted) {
                             ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const HomeScreen(),
-                              ),
-                            );
-                          } else if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: const Row(
@@ -181,6 +180,90 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
                   ),
                 ),
+
+                const SizedBox(height: 24),
+
+                // 5. Divider "OR"
+                const Row(
+                  children: [
+                    Expanded(
+                      child: Divider(color: Colors.white24, thickness: 1),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'OR',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Divider(color: Colors.white24, thickness: 1),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // 6. Google Sign In Button
+                GestureDetector(
+                  onTap: authProvider.isLoading
+                      ? null
+                      : () async {
+                          final success = await authProvider.signInWithGoogle();
+
+                          if (!success && mounted) {
+                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text(
+                                  "Google Sign-In canceled or failed.",
+                                ),
+                                backgroundColor: const Color(
+                                  0xFFE50914,
+                                ).withOpacity(0.9),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Simple Google "G" logo
+                        Container(
+                          height: 24,
+                          width: 24,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Image.network(
+                            'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
+                            height: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Continue with Google',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -196,10 +279,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     required IconData icon,
     required TextEditingController controller,
     bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
   }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
+      keyboardType: keyboardType,
       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       cursorColor: const Color(0xFFE50914), // Red cursor
       decoration: InputDecoration(

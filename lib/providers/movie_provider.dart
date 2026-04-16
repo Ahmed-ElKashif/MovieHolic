@@ -1,78 +1,65 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/movie.dart';
-import '../services/tmdb_service.dart';
 
 class MovieProvider with ChangeNotifier {
-  final TmdbService _service = TmdbService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  List<Movie> _trendingMovies =
-      []; // We will use this for both Trending AND Genre filtering
+  List<Movie> _allCloudMovies = [];
   List<Movie> _searchResults = [];
   List<Movie> _favoriteMovies = [];
-
-  // NEW: Genre State
-  List<dynamic> _genres = [];
-  int? _selectedGenreId; // Null means "All" (Trending)
 
   bool _isLoadingTrending = false;
   bool _isLoadingSearch = false;
 
-  List<Movie> get trendingMovies => _trendingMovies;
+  // We expose our cloud movies as "trending" so the HomeScreen doesn't have to change its code
+  List<Movie> get trendingMovies => _allCloudMovies;
   List<Movie> get searchResults => _searchResults;
   List<Movie> get favoriteMovies => _favoriteMovies;
-
-  // NEW: Genre Getters
-  List<dynamic> get genres => _genres;
-  int? get selectedGenreId => _selectedGenreId;
 
   bool get isLoadingTrending => _isLoadingTrending;
   bool get isLoadingSearch => _isLoadingSearch;
 
-  static const String _favoritesKey = 'favoriteMovies';
-
   MovieProvider() {
-    loadFavorites();
-    fetchGenres(); // Load genres immediately
-    fetchTrending();
+    fetchMoviesFromCloud(); // READ operation for global catalog
+
+    _auth.authStateChanges().listen((User? user) {
+      if (user != null) {
+        loadFavorites(); // READ operation for user vault
+      } else {
+        _favoriteMovies = [];
+        notifyListeners();
+      }
+    });
   }
 
-  // NEW: Fetch genres on startup
-  Future<void> fetchGenres() async {
-    _genres = await _service.fetchGenres();
-    notifyListeners();
-  }
+  // ==========================================
+  // GLOBAL CATALOG (READ ONLY)
+  // ==========================================
 
-  // NEW: The filtering logic
-  Future<void> selectGenre(int? genreId) async {
-    _selectedGenreId = genreId;
-    _isLoadingTrending = true; // Show loading spinner
+  Future<void> fetchMoviesFromCloud() async {
+    _isLoadingTrending = true;
     notifyListeners();
 
-    if (genreId == null) {
-      // If "All" is selected, fetch normal trending
-      _trendingMovies = await _service.fetchTrendingMovies();
-    } else {
-      // If a specific genre is selected, fetch those movies
-      _trendingMovies = await _service.fetchMoviesByGenre(genreId);
+    try {
+      // 1. READ: Pull all 50 movies from our seeded Firestore collection
+      final snapshot = await _firestore.collection('movies').get();
+
+      _allCloudMovies = snapshot.docs.map((doc) {
+        return Movie.fromJson(doc.data());
+      }).toList();
+    } catch (e) {
+      debugPrint("Error fetching cloud movies: $e");
     }
 
     _isLoadingTrending = false;
     notifyListeners();
   }
 
-  Future<void> fetchTrending() async {
-    _isLoadingTrending = true;
-    notifyListeners();
-
-    _trendingMovies = await _service.fetchTrendingMovies();
-
-    _isLoadingTrending = false;
-    notifyListeners();
-  }
-
-  Future<void> search(String query) async {
+  // Instant Local Search! No API needed because all movies are in memory.
+  void search(String query) {
     if (query.isEmpty) {
       _searchResults = [];
       notifyListeners();
@@ -82,34 +69,38 @@ class MovieProvider with ChangeNotifier {
     _isLoadingSearch = true;
     notifyListeners();
 
-    _searchResults = await _service.searchMovies(query);
+    // Search through our downloaded cloud movies instantly
+    _searchResults = _allCloudMovies.where((movie) {
+      return movie.title.toLowerCase().contains(query.toLowerCase());
+    }).toList();
 
     _isLoadingSearch = false;
     notifyListeners();
   }
 
-  Future<void> loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? favoritesJson = prefs.getString(_favoritesKey);
-    if (favoritesJson != null) {
-      try {
-        final List<dynamic> decodedList = jsonDecode(favoritesJson);
-        _favoriteMovies = decodedList
-            .map((json) => Movie.fromJson(json))
-            .toList();
-        notifyListeners();
-      } catch (e) {
-        debugPrint('Error decoding favorites: $e');
-      }
-    }
+  // ==========================================
+  // USER VAULT CRUD (CREATE, READ, DELETE)
+  // ==========================================
+
+  CollectionReference? get _userFavoritesCollection {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return null;
+    return _firestore.collection('users').doc(userId).collection('favorites');
   }
 
-  Future<void> _saveFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encodedList = jsonEncode(
-      _favoriteMovies.map((m) => m.toJson()).toList(),
-    );
-    await prefs.setString(_favoritesKey, encodedList);
+  Future<void> loadFavorites() async {
+    final collection = _userFavoritesCollection;
+    if (collection == null) return;
+
+    try {
+      final snapshot = await collection.get();
+      _favoriteMovies = snapshot.docs.map((doc) {
+        return Movie.fromJson(doc.data() as Map<String, dynamic>);
+      }).toList();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading cloud favorites: $e');
+    }
   }
 
   bool isFavorite(Movie movie) {
@@ -117,18 +108,32 @@ class MovieProvider with ChangeNotifier {
   }
 
   Future<void> addFavorite(Movie movie) async {
-    if (!isFavorite(movie)) {
-      _favoriteMovies.add(movie);
+    final collection = _userFavoritesCollection;
+    if (collection == null || isFavorite(movie)) return;
+
+    _favoriteMovies.add(movie);
+    notifyListeners();
+
+    try {
+      await collection.doc(movie.id.toString()).set(movie.toJson());
+    } catch (e) {
+      _favoriteMovies.removeWhere((m) => m.id == movie.id);
       notifyListeners();
-      await _saveFavorites();
     }
   }
 
   Future<void> removeFavorite(Movie movie) async {
-    if (isFavorite(movie)) {
-      _favoriteMovies.removeWhere((m) => m.id == movie.id);
+    final collection = _userFavoritesCollection;
+    if (collection == null || !isFavorite(movie)) return;
+
+    _favoriteMovies.removeWhere((m) => m.id == movie.id);
+    notifyListeners();
+
+    try {
+      await collection.doc(movie.id.toString()).delete();
+    } catch (e) {
+      _favoriteMovies.add(movie);
       notifyListeners();
-      await _saveFavorites();
     }
   }
 

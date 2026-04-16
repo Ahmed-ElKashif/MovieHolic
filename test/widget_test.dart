@@ -7,12 +7,14 @@ import 'package:filmflow/providers/auth_provider.dart';
 import 'package:filmflow/providers/movie_provider.dart';
 
 void main() {
-  testWidgets('App should build successfully smoke test', (WidgetTester tester) async {
+  testWidgets('App should build successfully smoke test', (
+    WidgetTester tester,
+  ) async {
     // Build our app wrapped in its required providers
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => AuthProvider()),
+          ChangeNotifierProvider(create: (_) => Authprovider()),
           ChangeNotifierProvider(create: (_) => MovieProvider()),
         ],
         child: const MovieHolicApp(),

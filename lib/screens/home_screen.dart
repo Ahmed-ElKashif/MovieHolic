@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <-- Needed for our seeding script
 import '../providers/movie_provider.dart';
-import '../screens/explore_screen.dart'; // <-- Imported Explore
+import '../services/tmdb_service.dart'; // <-- Needed to fetch the initial data
+import '../models/movie.dart'; // <-- Needed for the movie model
+import '../screens/explore_screen.dart';
 import '../screens/favorites_screen.dart';
-import '../screens/profile_screen.dart'; // <-- Imported Profile
+import '../screens/profile_screen.dart';
 import '../widgets/movie_card.dart';
 import '../widgets/main_background.dart';
 import '../widgets/movie_holic_logo.dart';
@@ -21,6 +24,61 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _isSeeding = false; // Tracks if the upload is currently running
+
+  // =====================================================================
+  // THE ONE-TIME SEEDING SCRIPT (WE WILL DELETE THIS LATER)
+  // =====================================================================
+  Future<void> _seedDatabaseToFirestore() async {
+    setState(() => _isSeeding = true);
+
+    try {
+      final tmdb = TmdbService();
+      final firestore = FirebaseFirestore.instance;
+
+      // 1. Fetch movies from a few different endpoints to get a big, diverse list
+      final trending = await tmdb.fetchTrendingMovies();
+      final action = await tmdb.fetchMoviesByGenre(28); // 28 is Action
+      final comedy = await tmdb.fetchMoviesByGenre(35); // 35 is Comedy
+
+      // 2. Combine them and remove any duplicates (in case a trending movie is also an action movie)
+      final Map<int, Movie> uniqueMovies = {};
+      for (var movie in [...trending, ...action, ...comedy]) {
+        uniqueMovies[movie.id] = movie;
+      }
+
+      // 3. Upload them all to a brand new global "movies" collection using a Firestore Batch (Super fast!)
+      final batch = firestore.batch();
+      for (var movie in uniqueMovies.values) {
+        final docRef = firestore.collection('movies').doc(movie.id.toString());
+        batch.set(docRef, movie.toJson());
+      }
+
+      await batch.commit(); // Executes the massive upload
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "SUCCESS: Uploaded ${uniqueMovies.length} movies to Firestore!",
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Seeding failed: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("FAILED: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
+
+    setState(() => _isSeeding = false);
+  }
+  // =====================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -69,11 +127,28 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // TAB 0: HOME (Purely Trending & Genres now!)
+    // TAB 0: HOME
     return MainBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBody: true,
+
+        // TEMPORARY: A giant floating button to trigger the seeding!
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _isSeeding ? null : _seedDatabaseToFirestore,
+          backgroundColor: const Color(0xFF00CED1),
+          icon: _isSeeding
+              ? const CircularProgressIndicator(color: Colors.white)
+              : const Icon(Icons.cloud_upload, color: Colors.black),
+          label: Text(
+            _isSeeding ? "UPLOADING TO CLOUD..." : "SEED DATABASE",
+            style: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+
         body: Consumer<MovieProvider>(
           builder: (context, provider, child) {
             if (provider.isLoadingTrending && provider.trendingMovies.isEmpty) {
@@ -82,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
 
-            // Separate the first movie for the Hero header
             final heroMovie = provider.trendingMovies.isNotEmpty
                 ? provider.trendingMovies.first
                 : null;
@@ -93,7 +167,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return CustomScrollView(
               slivers: [
-                // 1. Cinematic Hero Header OR Standard Logo Header
                 if (heroMovie != null)
                   SliverAppBar(
                     expandedHeight: 500.0,
@@ -160,7 +233,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                // 2. Modular Genre Selector
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
@@ -168,7 +240,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // 3. The Grid Content
                 if (gridMovies.isEmpty)
                   const SliverFillRemaining(
                     child: Center(
@@ -184,8 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       left: 24,
                       right: 24,
                       top: 8,
-                      bottom:
-                          100, // Bottom padding to prevent the nav bar from covering the last row
+                      bottom: 100,
                     ),
                     sliver: SliverGrid(
                       gridDelegate:
@@ -205,7 +275,6 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
 
-        // Modular Glass Navigation
         bottomNavigationBar: GlassBottomNav(
           currentIndex: _currentIndex,
           onTap: (index) => setState(() => _currentIndex = index),
