@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "183456931590",
+    "project_id": "movieholic-96d4d",
+    "storage_bucket": "movieholic-96d4d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:183456931590:android:578fd049646c8fb9ef0887",
+        "android_client_info": {
+          "package_name": "com.example.filmflow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbrf5qF9CpawWk5g5ArpmtB-uajz6294E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
